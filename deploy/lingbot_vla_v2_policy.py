@@ -31,6 +31,7 @@ from lingbotvla.models.vla.lingbot_vla.qwen3vl_in_vla import apply_lingbot_qwen3
 
 from lingbotvla.data.vla_data.utils import FeatureTransform
 from lingbotvla.models import build_processor
+from lingbotvla.models.module_utils import init_empty_weights
 import time
 import random
 
@@ -196,8 +197,14 @@ class LingbotVLAv2Server:
         use_bf16=True,
         use_fp32=False,
         use_compile=False,
+        num_inference_steps=None,
     ) -> None:
         assert not (use_bf16 and use_fp32), 'Bfloat16 or Float32!!!'
+        if num_inference_steps is not None and (
+            not isinstance(num_inference_steps, int) or isinstance(num_inference_steps, bool) or num_inference_steps <= 0
+        ):
+            raise ValueError("num_inference_steps must be a positive integer.")
+        self.num_inference_steps = num_inference_steps
         self.adaptive_ensemble_alpha = adaptive_ensemble_alpha
         self.action_ensemble_horizon = action_ensemble_horizon
         self.use_length = use_length
@@ -207,6 +214,8 @@ class LingbotVLAv2Server:
         self.task_description = None
 
         self.use_compile = use_compile
+        self.weight_device = "cuda"
+        self.weight_dtype = torch.bfloat16 if use_bf16 else torch.float32
         apply_lingbot_qwen3_vl_patch()
 
         self.vla = self.load_vla(path_to_pi_model)
@@ -224,15 +233,34 @@ class LingbotVLAv2Server:
         self.use_fp32 = use_fp32
         self.action_key: str= "action"
 
-    def load_model_weights(self, path_to_pi_model, strict=True):
-        all_safetensors = glob(os.path.join(path_to_pi_model, "*.safetensors"))
+    def load_model_weights(self, path_to_pi_model, strict=True, device="cpu", dtype=None):
+        all_safetensors = sorted(glob(os.path.join(path_to_pi_model, "*.safetensors")))
         merged_weights = {}
+        release_page_cache = (
+            torch.device(device).type == "cuda"
+            and Path("/etc/nv_tegra_release").is_file()
+            and hasattr(os, "posix_fadvise")
+        )
+        if release_page_cache:
+            self.release_weight_cache(all_safetensors)
 
         for file_path in tqdm(all_safetensors):
             with safe_open(file_path, framework="pt", device="cpu") as f:
                 for key in f.keys():
-                    merged_weights[key] = f.get_tensor(key)
-        self.vla.load_state_dict(merged_weights, strict=strict)
+                    tensor = f.get_tensor(key)
+                    if dtype is not None and tensor.is_floating_point():
+                        tensor = tensor.to(dtype=dtype)
+                    merged_weights[key] = tensor.to(device=device)
+                    del tensor
+            if release_page_cache:
+                self.release_weight_cache([file_path])
+        self.vla.load_state_dict(merged_weights, strict=strict, assign=True)
+
+    @staticmethod
+    def release_weight_cache(paths):
+        for path in paths:
+            with open(path, "rb") as source:
+                os.posix_fadvise(source.fileno(), 0, 0, os.POSIX_FADV_DONTNEED)
 
     def merge_qwen_config(self, qwen_config):
         if hasattr(qwen_config, 'to_dict'):
@@ -306,7 +334,8 @@ class LingbotVLAv2Server:
 
         if 'vocab_size' in training_config['model'] and training_config['model']['vocab_size'] != 0:
             config.vocab_size = training_config['model']['vocab_size']
-        # config.num_steps = 4
+        if self.num_inference_steps is not None:
+            config.num_steps = self.num_inference_steps
         config.use_cache = True # is necessary in inference
         # load processors
         self.processor = build_processor(base_model_path)
@@ -315,9 +344,15 @@ class LingbotVLAv2Server:
         
         print('Initializing model ... ')
 
-        self.vla = LingBotVlaV2InferencePolicy(config, eval=True)
+        with init_empty_weights():
+            self.vla = LingBotVlaV2InferencePolicy(config, eval=True)
 
-        self.load_model_weights(path_to_pi_model, strict=True)
+        self.load_model_weights(
+            path_to_pi_model,
+            strict=True,
+            device=getattr(self, "weight_device", "cpu"),
+            dtype=getattr(self, "weight_dtype", None),
+        )
         
         self.vla.feature_transform = None
         self.data_config = data_config
@@ -331,6 +366,9 @@ class LingbotVLAv2Server:
 
         if self.robot_norm_path is None:
             self.robot_norm_path = data_config.norm_stats_file
+            bundled_norm_path = training_config_path.parent / self.robot_norm_path
+            if not Path(self.robot_norm_path).is_absolute() and bundled_norm_path.is_file():
+                self.robot_norm_path = str(bundled_norm_path)
 
         print('Model initialized ... ')
 

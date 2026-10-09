@@ -119,6 +119,7 @@ class FeatureTransform:
             'task_index',
             'action_is_pad',
             'task',
+            'future_video_effective_fps',
         ])
 
         target_features  = {'states':[], 'actions':[], 'images':[]}
@@ -479,6 +480,8 @@ class FeatureTransform:
             }
         if image_grid_thw is not None:
             batch_dict['image_grid_thw'] = image_grid_thw
+        if 'future_video_effective_fps' in item:
+            batch_dict['future_video_effective_fps'] = item['future_video_effective_fps']
 
         if self.use_depth_align: 
             batch_dict['pil_images'] = pil_images

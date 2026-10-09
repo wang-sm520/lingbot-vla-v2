@@ -136,7 +136,7 @@ assert_torch_stack
 python -m pip install -e "${REPO_ROOT}" --no-deps
 assert_torch_stack
 
-python -m pip install -r "${REPO_ROOT}/requirements-depth.txt"
+python -m pip install -c "${REPO_ROOT}/requirements.txt" -r "${REPO_ROOT}/requirements-depth.txt"
 assert_torch_stack
 # mlflow/depth dependencies can pull broad transitive requirements. Restore
 # stableVLA's pinned core stack after resolving those runtime dependencies.
@@ -148,17 +148,10 @@ assert_torch_stack
 # unpinned huggingface_hub/numpy/opencv/gradio, which breaks the training pins.
 # Its optional train/test dataloader imports `pipeline`, but LingBot training
 # only needs the MoGe model code, so skip that PyPI-only dependency here.
-python - <<PY
-import site
-from pathlib import Path
-
-site_packages = Path(site.getsitepackages()[0])
-pth = site_packages / "stablevla_local_depth.pth"
-pth.write_text("${REPO_ROOT}/lingbotvla/models/vla/vision_models/morgbd_clean/3rd/utils3d\n")
-print("wrote", pth)
-PY
+python -m pip install --no-deps \
+  "utils3d @ https://github.com/EasternJournalist/utils3d/archive/3fab839f0be9931dac7c8488eb0e1600c236e183.tar.gz"
 python -m pip install -e "${REPO_ROOT}/lingbotvla/models/vla/vision_models/lingbot-depth" --no-deps
-python -m pip install -e "${REPO_ROOT}/lingbotvla/models/vla/vision_models/MoGe"
+python -m pip install -e "${REPO_ROOT}/lingbotvla/models/vla/vision_models/MoGe" --no-deps
 assert_torch_stack
 
 python - <<'PY'
@@ -172,7 +165,7 @@ import utils3d
 
 print("depth imports ok")
 PY
-python -m pip install huggingface_hub==0.34.0
+python -m pip install huggingface_hub==0.34.3
 if ! python -m pip check; then
   echo "[WARN] pip check reported dependency metadata issues." >&2
   echo "[WARN] lerobot and depth subpackages are installed with --no-deps intentionally to preserve training pins." >&2

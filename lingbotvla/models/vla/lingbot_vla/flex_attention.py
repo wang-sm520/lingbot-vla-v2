@@ -109,16 +109,17 @@ def flex_attention_forward(
     )
 
     #  mask is applied inside the kernel, ideally more efficiently than score_mod.
-    attn_output, attention_weights = flex_attention(
-        query_states,
-        key_states,
-        value_states,
-        block_mask=block_mask,
-        enable_gqa=True,  # because we shaped query/key states for GQA
-        scale=head_dim**-0.5 if scaling is None else scaling,
-        return_lse=True,
-        kernel_options=FLEX_KERNEL_OPTIONS,
-    )
+    with torch.autocast(device_type=query_states.device.type, enabled=False):
+        attn_output, attention_weights = flex_attention(
+            query_states,
+            key_states,
+            value_states,
+            block_mask=block_mask,
+            enable_gqa=True,
+            scale=head_dim**-0.5 if scaling is None else scaling,
+            return_lse=True,
+            kernel_options=FLEX_KERNEL_OPTIONS,
+        )
     attn_output = attn_output[:, :, :seq_len, :].to(dtype=original_dtype)
     attn_output = attn_output.transpose(1, 2).contiguous()  # [B, Q_LEN, H, head_dim]
     attn_output = attn_output.reshape(
@@ -213,16 +214,17 @@ def flex_attention_with_block_mask(
         key_states = F.pad(key_states, (0, 0, 0, pad_k), value=0.0)
         value_states = F.pad(value_states, (0, 0, 0, pad_k), value=0.0)
 
-    attn_output, _ = flex_attention(
-        query_states,
-        key_states,
-        value_states,
-        block_mask=block_mask,
-        enable_gqa=True,
-        scale=head_dim**-0.5 if scaling is None else scaling,
-        return_lse=True,
-        kernel_options=FLEX_KERNEL_OPTIONS,
-    )
+    with torch.autocast(device_type=query_states.device.type, enabled=False):
+        attn_output, _ = flex_attention(
+            query_states,
+            key_states,
+            value_states,
+            block_mask=block_mask,
+            enable_gqa=True,
+            scale=head_dim**-0.5 if scaling is None else scaling,
+            return_lse=True,
+            kernel_options=FLEX_KERNEL_OPTIONS,
+        )
     attn_output = attn_output[:, :, :seq_len, :].to(dtype=original_dtype)
     attn_output = attn_output.transpose(1, 2).contiguous()
     attn_output = attn_output.reshape(batch_size, -1, attn_output.shape[2] * attn_output.shape[3])

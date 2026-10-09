@@ -8,6 +8,16 @@
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-Apache--2.0-green"></a>
 </p>
 
+## AIRBOT Play training
+
+This fork adds AIRBOT Play single-arm, two-camera training on the 600-episode can/paper-bag/watermelon dataset: LeRobot v3 loading, normalization, LoRA training/resume/export, Orin inference, and full-policy fine-tuning on another server.
+
+- [Full-parameter training on a new server](docs/AIRBOT_FULL_FINETUNING.md): installation, data/weight preparation, single-GPU BF16/Kahan and multi-GPU FP32-master configurations, training and resume commands.
+- [Existing LoRA and robot integration](deploy/AIRBOT_PLAY.md).
+- [Orin deployment](deploy/ORIN_MULTITASK_20261009.md).
+
+Datasets, trained checkpoints, normalization statistics, vendor SDKs and virtual environments are not included. Full-parameter training uses `tasks/vla/train_lingbotvla.py`; `tasks/vla/train_airbot_lora.py` remains the separate LoRA entrypoint. The upstream overview follows.
+
 ## Overview
 
 **LingBot-VLA 2.0** is a practical Vision-Language-Action foundation model designed to move from large-scale pre-training toward reliable real-world robot applications.
@@ -39,7 +49,7 @@ Requirements:
 Before running the setup script, make sure Conda is initialized in your shell and `conda activate` works.
 
 ```bash
-git clone https://github.com/Robbyant/lingbot-vla-v2.git
+git clone https://github.com/wang-sm520/lingbot-vla-v2.git
 cd lingbot-vla-v2
 
 bash tools/create_train_env.sh

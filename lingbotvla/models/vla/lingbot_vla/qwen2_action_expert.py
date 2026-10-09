@@ -172,7 +172,7 @@ class Qwen2FusedExperts(nn.Module):
                     device=hidden_states.device,
                     dtype=hidden_states.dtype,
                 ),
-                "out": torch.empty((num_tokens, hidden_size), device=hidden_states.device, dtype=torch.float32),
+                "out": torch.empty((num_tokens, int(top_k), hidden_size), device=hidden_states.device, dtype=torch.float32),
             }
             self._robby_moe_workspace_key = key
         return self._robby_moe_workspace

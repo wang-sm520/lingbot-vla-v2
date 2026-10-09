@@ -148,10 +148,9 @@ def _moe_down_grouped_kernel(
             other=0.0,
         )
         acc += tl.dot(x, w)
-    tl.atomic_add(
-        out_ptr + rows[:, None] * D + offs_d[None, :],
+    tl.store(
+        out_ptr + (rows[:, None] * TOPK + slots[:, None]) * D + offs_d[None, :],
         acc,
-        sem="relaxed",
         mask=valid_m[:, None] & (offs_d[None, :] < D),
     )
 
@@ -189,7 +188,7 @@ def robby_moe_forward(
         rows = torch.empty((E, max_routes), device=hidden_states.device, dtype=torch.int32)
         slots = torch.empty((E, max_routes), device=hidden_states.device, dtype=torch.int32)
         inter = torch.empty((T, top_k, I), device=hidden_states.device, dtype=hidden_states.dtype)
-        out = torch.empty((T, D), device=hidden_states.device, dtype=torch.float32)
+        out = torch.empty((T, top_k, D), device=hidden_states.device, dtype=torch.float32)
     else:
         counts = workspace["counts"]
         rows = workspace["rows"]
@@ -261,4 +260,4 @@ def robby_moe_forward(
         BLOCK_I=64,
         num_warps=4,
     )
-    return out.reshape_as(hidden_states)
+    return out.sum(dim=1).reshape_as(hidden_states)

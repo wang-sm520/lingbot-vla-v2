@@ -1,0 +1,26 @@
+base_config: configs/vla/airbot_play/airbot_play.yaml
+output_dir: outputs/airbot_play_multitask_lora_30k
+seed: 42
+max_steps: 100000
+micro_batch_size: 16
+gradient_accumulation_steps: 2
+num_workers: 2
+save_steps: 2500
+keep_checkpoints: 2
+lora:
+  rank: 16
+  alpha: 32
+  dropout: 0.0
+  target_modules: '.*\.self_attn\.(q_proj|k_proj|v_proj|o_proj)'
+  modules_to_save:
+    - state_proj
+    - action_in_proj
+    - action_out_proj
+    - action_time_mlp_in
+    - action_time_mlp_out
+optimizer:
+  learning_rate: 0.00005
+  warmup_steps: 1000
+  betas: [0.9, 0.95]
+  weight_decay: 0.01
+  max_grad_norm: 1.0
